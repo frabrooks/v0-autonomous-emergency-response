@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Patrol, Incident } from "@/lib/types";
@@ -62,13 +62,7 @@ interface DispatchMapProps {
   selectedPatrolId?: number;
 }
 
-function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [map, center, zoom]);
-  return null;
-}
+// Removed MapUpdater - it was resetting zoom on every data refresh
 
 export default function DispatchMap({
   patrols,
@@ -94,18 +88,19 @@ export default function DispatchMap({
   const center: [number, number] = [51.505, -0.09];
   const zoom = 12;
 
-  // Find selected incident and patrol for drawing route
-  const selectedIncident = incidents.find((i) => i.id === selectedIncidentId);
-  const selectedPatrol = patrols.find((p) => p.id === selectedPatrolId);
-
-  // Create route line between dispatched patrol and incident
-  const routeLine =
-    selectedIncident && selectedPatrol
-      ? [
-          [parseCoord(selectedPatrol.latitude), parseCoord(selectedPatrol.longitude)] as [number, number],
-          [parseCoord(selectedIncident.latitude), parseCoord(selectedIncident.longitude)] as [number, number],
-        ]
-      : null;
+  // Build route polylines for all dispatched patrols with route_coordinates
+  const patrolRoutes = patrols
+    .filter((p) => p.status === "dispatched" && p.route_coordinates && p.route_coordinates.length > 0)
+    .map((patrol) => {
+      // OSRM returns [lng, lat], Leaflet needs [lat, lng]
+      const routeIndex = patrol.route_index || 0;
+      // Show remaining route from current position
+      const remainingRoute = patrol.route_coordinates!.slice(routeIndex);
+      const positions = remainingRoute.map(
+        (coord) => [coord[1], coord[0]] as [number, number]
+      );
+      return { patrolId: patrol.id, positions };
+    });
 
   return (
     <MapContainer
@@ -118,7 +113,6 @@ export default function DispatchMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapUpdater center={center} zoom={zoom} />
 
       {/* Patrol Markers */}
       {patrols.map((patrol) => {
@@ -179,15 +173,16 @@ export default function DispatchMap({
         );
       })}
 
-      {/* Route Line */}
-      {routeLine && (
+      {/* Route Lines for all dispatched patrols */}
+      {patrolRoutes.map(({ patrolId, positions }) => (
         <Polyline
-          positions={routeLine}
-          color="hsl(217, 91%, 60%)"
-          weight={3}
-          dashArray="10, 10"
+          key={`route-${patrolId}`}
+          positions={positions}
+          color="#3b82f6"
+          weight={4}
+          opacity={0.8}
         />
-      )}
+      ))}
     </MapContainer>
   );
 }
