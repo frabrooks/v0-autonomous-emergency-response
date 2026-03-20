@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Mic,
-  MicOff,
   Square,
   ArrowLeft,
   AlertTriangle,
@@ -16,14 +15,16 @@ import {
   Send,
   Loader2,
   Radio,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import type { IncidentSeverity } from "@/lib/types";
 
-interface Analysis {
+interface FormData {
   description: string;
-  severity: IncidentSeverity;
-  latitude: number;
-  longitude: number;
+  severity: IncidentSeverity | "";
+  latitude: string;
+  longitude: string;
   suggestedActions: string[];
 }
 
@@ -36,12 +37,22 @@ export default function TranscribePage() {
   const [transcript, setTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isDispatching, setIsDispatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
+  const [lastAnalyzedLength, setLastAnalyzedLength] = useState(0);
+  
+  // Form state - editable by user
+  const [formData, setFormData] = useState<FormData>({
+    description: "",
+    severity: "",
+    latitude: "",
+    longitude: "",
+    suggestedActions: [],
+  });
   
   const recognizerRef = useRef<import("microsoft-cognitiveservices-speech-sdk").SpeechRecognizer | null>(null);
+  const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load Speech SDK on mount
   useEffect(() => {
@@ -49,6 +60,28 @@ export default function TranscribePage() {
       SpeechSDK = sdk;
     });
   }, []);
+
+  // Auto-analyze when transcript changes (debounced)
+  useEffect(() => {
+    // Only auto-analyze if we have new significant content (at least 50 chars more than last analysis)
+    if (transcript.length > lastAnalyzedLength + 50 && transcript.length > 30) {
+      // Clear existing timeout
+      if (analyzeTimeoutRef.current) {
+        clearTimeout(analyzeTimeoutRef.current);
+      }
+      
+      // Debounce analysis by 2 seconds after last transcript update
+      analyzeTimeoutRef.current = setTimeout(() => {
+        analyzeTranscript(transcript);
+      }, 2000);
+    }
+    
+    return () => {
+      if (analyzeTimeoutRef.current) {
+        clearTimeout(analyzeTimeoutRef.current);
+      }
+    };
+  }, [transcript, lastAnalyzedLength]);
 
   const startRecording = useCallback(async () => {
     if (!SpeechSDK) {
@@ -63,7 +96,8 @@ export default function TranscribePage() {
       // Get token from our API
       const tokenResponse = await fetch("/api/speech-token");
       if (!tokenResponse.ok) {
-        throw new Error("Failed to get speech token");
+        const errorData = await tokenResponse.json();
+        throw new Error(errorData.error || "Failed to get speech token");
       }
       const { token, region } = await tokenResponse.json();
 
@@ -103,8 +137,6 @@ export default function TranscribePage() {
             setTranscript((prev) => (prev ? prev + " " + text : text));
             setInterimTranscript("");
           }
-        } else if (event.result.reason === SpeechSDK!.ResultReason.NoMatch) {
-          console.log("No speech recognized");
         }
       };
 
@@ -152,11 +184,14 @@ export default function TranscribePage() {
       if (recognizerRef.current) {
         recognizerRef.current.close();
       }
+      if (analyzeTimeoutRef.current) {
+        clearTimeout(analyzeTimeoutRef.current);
+      }
     };
   }, []);
 
-  const analyzeTranscript = async () => {
-    if (!transcript) return;
+  const analyzeTranscript = async (textToAnalyze: string) => {
+    if (!textToAnalyze || textToAnalyze.length < 20) return;
 
     setIsAnalyzing(true);
     setError(null);
@@ -164,12 +199,20 @@ export default function TranscribePage() {
       const response = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript: textToAnalyze }),
       });
 
       if (response.ok) {
         const data = await response.json();
-        setAnalysis(data);
+        // Update form data with AI analysis results
+        setFormData({
+          description: data.description || "",
+          severity: data.severity || "",
+          latitude: data.latitude?.toString() || "",
+          longitude: data.longitude?.toString() || "",
+          suggestedActions: data.suggestedActions || [],
+        });
+        setLastAnalyzedLength(textToAnalyze.length);
       } else {
         const errorData = await response.json();
         setError(errorData.error || "Analysis failed");
@@ -182,8 +225,33 @@ export default function TranscribePage() {
     }
   };
 
+  const handleFormChange = (field: keyof FormData, value: string | string[]) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  // Validation - check if all required fields are filled
+  const isFormValid = () => {
+    return (
+      formData.description.trim() !== "" &&
+      formData.severity !== "" &&
+      formData.latitude.trim() !== "" &&
+      formData.longitude.trim() !== "" &&
+      !isNaN(parseFloat(formData.latitude)) &&
+      !isNaN(parseFloat(formData.longitude))
+    );
+  };
+
+  const getMissingFields = (): string[] => {
+    const missing: string[] = [];
+    if (!formData.description.trim()) missing.push("Description");
+    if (!formData.severity) missing.push("Severity");
+    if (!formData.latitude.trim() || isNaN(parseFloat(formData.latitude))) missing.push("Latitude");
+    if (!formData.longitude.trim() || isNaN(parseFloat(formData.longitude))) missing.push("Longitude");
+    return missing;
+  };
+
   const dispatchPatrol = async () => {
-    if (!analysis) return;
+    if (!isFormValid()) return;
 
     setIsDispatching(true);
     setError(null);
@@ -193,10 +261,10 @@ export default function TranscribePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          description: analysis.description,
-          latitude: analysis.latitude,
-          longitude: analysis.longitude,
-          severity: analysis.severity,
+          description: formData.description,
+          latitude: parseFloat(formData.latitude),
+          longitude: parseFloat(formData.longitude),
+          severity: formData.severity,
           transcript,
         }),
       });
@@ -229,7 +297,7 @@ export default function TranscribePage() {
     }
   };
 
-  const getSeverityVariant = (severity: IncidentSeverity) => {
+  const getSeverityVariant = (severity: IncidentSeverity | "") => {
     switch (severity) {
       case "critical":
         return "critical";
@@ -239,15 +307,26 @@ export default function TranscribePage() {
         return "warning";
       case "low":
         return "secondary";
+      default:
+        return "outline";
     }
   };
 
-  const clearTranscript = () => {
+  const clearAll = () => {
     setTranscript("");
     setInterimTranscript("");
-    setAnalysis(null);
+    setFormData({
+      description: "",
+      severity: "",
+      latitude: "",
+      longitude: "",
+      suggestedActions: [],
+    });
+    setLastAnalyzedLength(0);
     setError(null);
   };
+
+  const missingFields = getMissingFields();
 
   return (
     <main className="min-h-screen bg-background">
@@ -263,6 +342,12 @@ export default function TranscribePage() {
             <h1 className="text-xl font-semibold">Emergency Call Transcription</h1>
           </div>
           <div className="flex items-center gap-2">
+            {isAnalyzing && (
+              <Badge variant="secondary">
+                <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                Analyzing...
+              </Badge>
+            )}
             {isRecording && (
               <Badge variant="destructive" className="animate-pulse">
                 <Radio className="w-3 h-3 mr-2" />
@@ -329,9 +414,6 @@ export default function TranscribePage() {
                     ? "Connecting to Azure Speech Services..."
                     : "Click to start live transcription"}
                 </p>
-                <p className="text-center text-xs text-muted-foreground">
-                  Powered by Azure Speech Services (UK English)
-                </p>
               </CardContent>
             </Card>
 
@@ -340,13 +422,13 @@ export default function TranscribePage() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Transcript</CardTitle>
                 {transcript && (
-                  <Button variant="ghost" size="sm" onClick={clearTranscript}>
-                    Clear
+                  <Button variant="ghost" size="sm" onClick={clearAll}>
+                    Clear All
                   </Button>
                 )}
               </CardHeader>
               <CardContent>
-                <div className="min-h-[200px] p-4 rounded-lg bg-secondary/50 border border-border">
+                <div className="min-h-[200px] max-h-[400px] overflow-y-auto p-4 rounded-lg bg-secondary/50 border border-border">
                   {transcript || interimTranscript ? (
                     <p className="text-foreground leading-relaxed whitespace-pre-wrap">
                       {transcript}
@@ -362,123 +444,184 @@ export default function TranscribePage() {
                     </p>
                   )}
                 </div>
-                {transcript && !analysis && (
-                  <Button
-                    onClick={analyzeTranscript}
-                    disabled={isAnalyzing || isRecording}
-                    className="w-full mt-4"
-                  >
+                {transcript && (
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{transcript.split(" ").length} words</span>
                     {isAnalyzing ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Analyzing with Azure OpenAI...
-                      </>
-                    ) : (
-                      <>
-                        <AlertTriangle className="w-4 h-4 mr-2" />
-                        Analyze Incident
-                      </>
-                    )}
-                  </Button>
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        AI analyzing...
+                      </span>
+                    ) : lastAnalyzedLength > 0 ? (
+                      <span className="flex items-center gap-1 text-green-600">
+                        <CheckCircle2 className="w-3 h-3" />
+                        AI analyzed
+                      </span>
+                    ) : null}
+                  </div>
                 )}
               </CardContent>
             </Card>
           </div>
 
-          {/* Right Column - Analysis & Dispatch */}
+          {/* Right Column - Incident Form */}
           <div className="space-y-6">
-            {analysis ? (
-              <>
-                {/* Incident Analysis */}
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between">
-                    <CardTitle className="text-lg">Incident Analysis</CardTitle>
-                    <Badge variant={getSeverityVariant(analysis.severity)}>
-                      {analysis.severity.toUpperCase()}
-                    </Badge>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">
-                        Description
-                      </h4>
-                      <p className="text-foreground">{analysis.description}</p>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-1">
-                        Estimated Location
-                      </h4>
-                      <div className="flex items-center gap-2 text-foreground">
-                        <MapPin className="w-4 h-4 text-primary" />
-                        <span className="font-mono text-sm">
-                          {analysis.latitude.toFixed(6)}, {analysis.longitude.toFixed(6)}
-                        </span>
-                      </div>
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                        Suggested Actions
-                      </h4>
-                      <ul className="space-y-2">
-                        {analysis.suggestedActions.map((action, index) => (
-                          <li
-                            key={index}
-                            className="flex items-start gap-2 text-sm text-foreground"
-                          >
-                            <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0 text-xs">
-                              {index + 1}
-                            </span>
-                            {action}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </CardContent>
-                </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-lg">Incident Details</CardTitle>
+                {isAnalyzing && (
+                  <Badge variant="secondary">
+                    <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                    Updating...
+                  </Badge>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Description */}
+                <div>
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
+                    Description
+                    {formData.description ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-destructive" />
+                    )}
+                  </label>
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => handleFormChange("description", e.target.value)}
+                    placeholder="Describe the incident..."
+                    className="w-full h-24 px-3 py-2 rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                  />
+                </div>
 
-                {/* Dispatch Action */}
-                <Card className="border-primary/50">
-                  <CardContent className="pt-6">
-                    <Button
-                      onClick={dispatchPatrol}
-                      disabled={isDispatching}
-                      size="lg"
-                      className="w-full"
-                      variant={analysis.severity === "critical" ? "destructive" : "default"}
-                    >
-                      {isDispatching ? (
-                        <>
-                          <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                          Dispatching Nearest Unit...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-5 h-5 mr-2" />
-                          Dispatch Nearest Patrol
-                        </>
-                      )}
-                    </Button>
-                    <p className="text-center text-sm text-muted-foreground mt-3">
-                      This will automatically assign the nearest available patrol unit
+                {/* Severity */}
+                <div>
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
+                    Severity Level
+                    {formData.severity ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-destructive" />
+                    )}
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {(["low", "medium", "high", "critical"] as const).map((level) => (
+                      <button
+                        key={level}
+                        onClick={() => handleFormChange("severity", level)}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                          formData.severity === level
+                            ? level === "critical"
+                              ? "bg-red-600 text-white"
+                              : level === "high"
+                              ? "bg-orange-500 text-white"
+                              : level === "medium"
+                              ? "bg-yellow-500 text-black"
+                              : "bg-green-600 text-white"
+                            : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                        }`}
+                      >
+                        {level.charAt(0).toUpperCase() + level.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="text-sm font-medium text-foreground flex items-center gap-2 mb-2">
+                    <MapPin className="w-4 h-4" />
+                    Location Coordinates
+                    {formData.latitude && formData.longitude && !isNaN(parseFloat(formData.latitude)) && !isNaN(parseFloat(formData.longitude)) ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-destructive" />
+                    )}
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.latitude}
+                        onChange={(e) => handleFormChange("latitude", e.target.value)}
+                        placeholder="Latitude (e.g., 51.5074)"
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="text"
+                        value={formData.longitude}
+                        onChange={(e) => handleFormChange("longitude", e.target.value)}
+                        placeholder="Longitude (e.g., -0.1278)"
+                        className="w-full px-3 py-2 rounded-md border border-border bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Suggested Actions */}
+                {formData.suggestedActions.length > 0 && (
+                  <div>
+                    <label className="text-sm font-medium text-foreground mb-2 block">
+                      AI Suggested Actions
+                    </label>
+                    <ul className="space-y-2">
+                      {formData.suggestedActions.map((action, index) => (
+                        <li
+                          key={index}
+                          className="flex items-start gap-2 text-sm text-foreground bg-secondary/50 p-2 rounded"
+                        >
+                          <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center flex-shrink-0 text-xs">
+                            {index + 1}
+                          </span>
+                          {action}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Dispatch Button */}
+            <Card className={isFormValid() ? "border-primary/50" : "border-destructive/30"}>
+              <CardContent className="pt-6">
+                {missingFields.length > 0 && (
+                  <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-lg">
+                    <p className="text-sm text-destructive flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4" />
+                      Missing required fields: {missingFields.join(", ")}
                     </p>
-                  </CardContent>
-                </Card>
-              </>
-            ) : (
-              <Card className="border-dashed">
-                <CardContent className="py-16 text-center">
-                  <AlertTriangle className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
-                  <h3 className="text-lg font-medium text-muted-foreground mb-2">
-                    No Analysis Yet
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    Start recording an emergency call - transcript appears in real-time.
-                    <br />
-                    When ready, click analyze to extract incident details.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+                  </div>
+                )}
+                <Button
+                  onClick={dispatchPatrol}
+                  disabled={!isFormValid() || isDispatching}
+                  size="lg"
+                  className="w-full"
+                  variant={formData.severity === "critical" ? "destructive" : "default"}
+                >
+                  {isDispatching ? (
+                    <>
+                      <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                      Dispatching Nearest Unit...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5 mr-2" />
+                      Dispatch Nearest Patrol
+                    </>
+                  )}
+                </Button>
+                <p className="text-center text-sm text-muted-foreground mt-3">
+                  {isFormValid()
+                    ? "Ready to dispatch - all required information provided"
+                    : "Complete all fields above to enable dispatch"}
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
