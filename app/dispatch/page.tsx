@@ -107,9 +107,9 @@ function DispatchContent() {
       }
       setIsSimulating(false);
     } else {
-      // Run immediately and then every 2 seconds
+      // Run immediately and then every 500ms for faster demo
       runSimulation();
-      simulationRef.current = setInterval(runSimulation, 2000);
+      simulationRef.current = setInterval(runSimulation, 500);
       setIsSimulating(true);
     }
   };

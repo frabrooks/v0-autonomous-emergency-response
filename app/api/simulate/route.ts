@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 const ARRIVAL_THRESHOLD_METERS = 50;
 
 // Number of route points to advance per simulation tick
-const ROUTE_ADVANCE_STEP = 3;
+const ROUTE_ADVANCE_STEP = 15;
 
 // Calculate distance between two points using Haversine formula
 function haversineDistance(
