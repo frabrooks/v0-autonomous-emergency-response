@@ -146,22 +146,38 @@ export default function DispatchMap({
       })}
 
       {/* Incident Markers */}
-      {incidents.map((incident) => (
-        <Marker
-          key={`incident-${incident.id}`}
-          position={[parseCoord(incident.latitude), parseCoord(incident.longitude)]}
-          icon={incidentIcon}
-        >
-          <Popup>
-            <div className="text-sm">
-              <p className="font-bold text-red-600">INCIDENT</p>
-              <p>{incident.description}</p>
-              <p className="capitalize">Severity: {incident.severity}</p>
-              <p className="capitalize">Status: {incident.status}</p>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {incidents.map((incident) => {
+        // Find the assigned patrol if any
+        const assignedPatrol = incident.assigned_patrol_id 
+          ? patrols.find(p => p.id === incident.assigned_patrol_id)
+          : null;
+        
+        return (
+          <Marker
+            key={`incident-${incident.id}`}
+            position={[parseCoord(incident.latitude), parseCoord(incident.longitude)]}
+            icon={incidentIcon}
+          >
+            <Popup>
+              <div className="text-sm min-w-[180px]">
+                <p className="font-bold text-red-600 text-base">INCIDENT</p>
+                <p className="mt-1">{incident.description}</p>
+                <div className="mt-2 space-y-1 border-t pt-2">
+                  <p><span className="font-medium">Severity:</span> <span className="capitalize">{incident.severity}</span></p>
+                  <p><span className="font-medium">Status:</span> <span className="capitalize">{incident.status}</span></p>
+                  {assignedPatrol ? (
+                    <p className="text-green-700 font-medium">
+                      Responding: {assignedPatrol.call_sign}
+                    </p>
+                  ) : incident.status === "pending" ? (
+                    <p className="text-orange-600 font-medium">Awaiting dispatch</p>
+                  ) : null}
+                </div>
+              </div>
+            </Popup>
+          </Marker>
+        );
+      })}
 
       {/* Route Line */}
       {routeLine && (
