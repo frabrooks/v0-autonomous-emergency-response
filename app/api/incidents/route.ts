@@ -25,8 +25,16 @@ export async function POST(request: Request) {
     const { description, latitude, longitude, severity, transcript } = body;
 
     const result = await sql`
-      INSERT INTO incidents (description, latitude, longitude, severity, transcript, status)
-      VALUES (${description}, ${latitude}, ${longitude}, ${severity}, ${transcript}, 'pending')
+      INSERT INTO incidents (description, latitude, longitude, location, severity, transcript, status)
+      VALUES (
+        ${description}, 
+        ${latitude}, 
+        ${longitude}, 
+        ST_SetSRID(ST_MakePoint(${longitude}, ${latitude}), 4326)::geography,
+        ${severity}, 
+        ${transcript}, 
+        'pending'
+      )
       RETURNING *
     `;
 
