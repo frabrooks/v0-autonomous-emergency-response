@@ -1,25 +1,51 @@
 import { sql } from "@/lib/db";
 import { NextResponse } from "next/server";
-import { generateText } from "ai";
 import type { Patrol, Incident } from "@/lib/types";
 
-function calculateDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-): number {
-  const R = 6371; // Earth's radius in km
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
+// Generate direction based on coordinate differences
+function getDirection(fromLat: number, fromLon: number, toLat: number, toLon: number): string {
+  const latDiff = toLat - fromLat;
+  const lonDiff = toLon - fromLon;
+  
+  let direction = "";
+  if (Math.abs(latDiff) > 0.001) {
+    direction += latDiff > 0 ? "North" : "South";
+  }
+  if (Math.abs(lonDiff) > 0.001) {
+    direction += lonDiff > 0 ? "east" : "west";
+  }
+  return direction || "nearby";
+}
+
+// Generate dispatch instructions without AI
+function generateDispatchInstructions(
+  patrol: Patrol,
+  incident: Incident,
+  distanceKm: number
+): string {
+  const direction = getDirection(
+    patrol.latitude,
+    patrol.longitude,
+    incident.latitude,
+    incident.longitude
+  );
+  
+  const severityReminders: Record<string, string> = {
+    critical: "Code 3 response. Exercise extreme caution. Request backup if needed.",
+    high: "Expedited response. Assess threat level on approach.",
+    medium: "Standard response. Maintain situational awareness.",
+    low: "Routine response. Report status on arrival.",
+  };
+
+  const reminder = severityReminders[incident.severity] || severityReminders.medium;
+  const radioCode = `${patrol.call_sign}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+
+  return `DISPATCH CONFIRMED: ${patrol.call_sign} responding to incident.
+Location: ${distanceKm.toFixed(2)} km ${direction}.
+Incident: ${incident.description}
+Severity: ${incident.severity.toUpperCase()}
+${reminder}
+Radio confirmation: ${radioCode}`;
 }
 
 export async function POST(request: Request) {
@@ -41,60 +67,38 @@ export async function POST(request: Request) {
     
     const incident = incidents[0] as Incident;
 
-    // Get available patrols
-    const patrols = await sql`
-      SELECT * FROM patrols WHERE status = 'available'
+    // Use PostGIS to find the nearest available patrol
+    // ST_Distance calculates distance in meters between geography points
+    const nearestPatrols = await sql`
+      SELECT 
+        p.*,
+        ST_Distance(p.location, i.location) / 1000 as distance_km
+      FROM patrols p
+      CROSS JOIN incidents i
+      WHERE p.status = 'available'
+        AND i.id = ${incidentId}
+        AND p.location IS NOT NULL
+        AND i.location IS NOT NULL
+      ORDER BY ST_Distance(p.location, i.location)
+      LIMIT 1
     `;
 
-    if (patrols.length === 0) {
+    if (nearestPatrols.length === 0) {
       return NextResponse.json(
         { error: "No available patrols" },
         { status: 400 }
       );
     }
 
-    // Find the nearest patrol
-    let nearestPatrol: Patrol | null = null;
-    let minDistance = Infinity;
+    const nearestPatrol = nearestPatrols[0] as Patrol & { distance_km: number };
+    const distanceKm = nearestPatrol.distance_km;
 
-    for (const patrol of patrols as Patrol[]) {
-      const distance = calculateDistance(
-        incident.latitude,
-        incident.longitude,
-        patrol.latitude,
-        patrol.longitude
-      );
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestPatrol = patrol;
-      }
-    }
-
-    if (!nearestPatrol) {
-      return NextResponse.json(
-        { error: "Could not find nearest patrol" },
-        { status: 500 }
-      );
-    }
-
-    // Generate navigation instructions using AI
-    const { text: instructions } = await generateText({
-      model: "openai/gpt-4o-mini",
-      prompt: `You are a police dispatch assistant. Generate brief, clear navigation instructions for patrol unit ${nearestPatrol.call_sign}.
-
-Current patrol location: ${nearestPatrol.latitude}, ${nearestPatrol.longitude} (approximately ${minDistance.toFixed(2)} km away)
-Incident location: ${incident.latitude}, ${incident.longitude}
-Incident description: ${incident.description}
-Severity: ${incident.severity}
-
-Provide:
-1. A brief acknowledgment of the dispatch
-2. Estimated distance and direction
-3. Key safety reminders based on incident severity
-4. Radio confirmation code
-
-Keep the response concise and professional, suitable for police radio communication.`,
-    });
+    // Generate dispatch instructions without AI
+    const instructions = generateDispatchInstructions(
+      nearestPatrol,
+      incident,
+      distanceKm
+    );
 
     // Update patrol status to dispatched
     await sql`
@@ -121,7 +125,7 @@ Keep the response concise and professional, suitable for police radio communicat
       incident: updatedIncident[0],
       patrol: updatedPatrol[0],
       instructions,
-      distance: minDistance.toFixed(2),
+      distance: distanceKm.toFixed(2),
     });
   } catch (error) {
     console.error("Error dispatching patrol:", error);
