@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { generateObject } from "ai";
+import { createAzure } from "@ai-sdk/azure";
 import { z } from "zod";
 
 const incidentSchema = z.object({
@@ -28,8 +29,14 @@ export async function POST(request: Request) {
       );
     }
 
+    // Create Azure OpenAI provider
+    const azure = createAzure({
+      resourceName: process.env.AZURE_OPENAI_RESOURCE_NAME!,
+      apiKey: process.env.AZURE_OPENAI_API_KEY!,
+    });
+
     const { object: analysis } = await generateObject({
-      model: "openai/gpt-4o-mini",
+      model: azure(process.env.AZURE_OPENAI_DEPLOYMENT_NAME || "gpt-4o-mini"),
       schema: incidentSchema,
       prompt: `You are an emergency dispatch AI assistant analyzing a 999 emergency call transcript.
 

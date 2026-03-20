@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   MapPin,
   Send,
   Loader2,
+  Radio,
 } from "lucide-react";
 import type { IncidentSeverity } from "@/lib/types";
 
@@ -26,78 +27,139 @@ interface Analysis {
   suggestedActions: string[];
 }
 
+// Import Speech SDK dynamically to avoid SSR issues
+let SpeechSDK: typeof import("microsoft-cognitiveservices-speech-sdk") | null = null;
+
 export default function TranscribePage() {
   const router = useRouter();
   const [isRecording, setIsRecording] = useState(false);
   const [transcript, setTranscript] = useState("");
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isDispatching, setIsDispatching] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(false);
+  
+  const recognizerRef = useRef<import("microsoft-cognitiveservices-speech-sdk").SpeechRecognizer | null>(null);
+
+  // Load Speech SDK on mount
+  useEffect(() => {
+    import("microsoft-cognitiveservices-speech-sdk").then((sdk) => {
+      SpeechSDK = sdk;
+    });
+  }, []);
 
   const startRecording = useCallback(async () => {
+    if (!SpeechSDK) {
+      setError("Speech SDK not loaded yet. Please try again.");
+      return;
+    }
+
+    setIsInitializing(true);
+    setError(null);
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: "audio/webm",
-      });
+      // Get token from our API
+      const tokenResponse = await fetch("/api/speech-token");
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to get speech token");
+      }
+      const { token, region } = await tokenResponse.json();
 
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
+      // Create speech config with token
+      const speechConfig = SpeechSDK.SpeechConfig.fromAuthorizationToken(token, region);
+      speechConfig.speechRecognitionLanguage = "en-GB"; // UK English for 999 calls
+      
+      // Enable interim results for real-time feedback
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs,
+        "15000"
+      );
+      speechConfig.setProperty(
+        SpeechSDK.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs,
+        "5000"
+      );
 
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          chunksRef.current.push(event.data);
+      // Create audio config from microphone
+      const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+
+      // Create recognizer
+      const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+      recognizerRef.current = recognizer;
+
+      // Handle recognizing event (interim results)
+      recognizer.recognizing = (_sender, event) => {
+        if (event.result.reason === SpeechSDK!.ResultReason.RecognizingSpeech) {
+          setInterimTranscript(event.result.text);
         }
       };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        stream.getTracks().forEach((track) => track.stop());
-
-        // Transcribe the audio
-        setIsTranscribing(true);
-        try {
-          const formData = new FormData();
-          formData.append("audio", audioBlob, "recording.webm");
-
-          const response = await fetch("/api/transcribe", {
-            method: "POST",
-            body: formData,
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            setTranscript((prev) => (prev ? prev + " " + data.text : data.text));
+      // Handle recognized event (final results)
+      recognizer.recognized = (_sender, event) => {
+        if (event.result.reason === SpeechSDK!.ResultReason.RecognizedSpeech) {
+          const text = event.result.text;
+          if (text) {
+            setTranscript((prev) => (prev ? prev + " " + text : text));
+            setInterimTranscript("");
           }
-        } catch (error) {
-          console.error("Transcription error:", error);
-        } finally {
-          setIsTranscribing(false);
+        } else if (event.result.reason === SpeechSDK!.ResultReason.NoMatch) {
+          console.log("No speech recognized");
         }
       };
 
-      mediaRecorder.start();
+      // Handle errors
+      recognizer.canceled = (_sender, event) => {
+        if (event.reason === SpeechSDK!.CancellationReason.Error) {
+          console.error("Speech recognition error:", event.errorDetails);
+          setError(`Recognition error: ${event.errorDetails}`);
+        }
+        stopRecording();
+      };
+
+      recognizer.sessionStopped = () => {
+        stopRecording();
+      };
+
+      // Start continuous recognition
+      await recognizer.startContinuousRecognitionAsync();
       setIsRecording(true);
-    } catch (error) {
-      console.error("Error starting recording:", error);
-      alert("Could not access microphone. Please grant permission.");
+      setIsInitializing(false);
+    } catch (err) {
+      console.error("Error starting recognition:", err);
+      setError(err instanceof Error ? err.message : "Failed to start recording");
+      setIsInitializing(false);
     }
   }, []);
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
+  const stopRecording = useCallback(async () => {
+    if (recognizerRef.current) {
+      try {
+        await recognizerRef.current.stopContinuousRecognitionAsync();
+        recognizerRef.current.close();
+        recognizerRef.current = null;
+      } catch (err) {
+        console.error("Error stopping recognition:", err);
+      }
     }
-  }, [isRecording]);
+    setIsRecording(false);
+    setInterimTranscript("");
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognizerRef.current) {
+        recognizerRef.current.close();
+      }
+    };
+  }, []);
 
   const analyzeTranscript = async () => {
     if (!transcript) return;
 
     setIsAnalyzing(true);
+    setError(null);
     try {
       const response = await fetch("/api/analyze", {
         method: "POST",
@@ -108,9 +170,13 @@ export default function TranscribePage() {
       if (response.ok) {
         const data = await response.json();
         setAnalysis(data);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.error || "Analysis failed");
       }
-    } catch (error) {
-      console.error("Analysis error:", error);
+    } catch (err) {
+      console.error("Analysis error:", err);
+      setError("Failed to analyze transcript");
     } finally {
       setIsAnalyzing(false);
     }
@@ -120,6 +186,7 @@ export default function TranscribePage() {
     if (!analysis) return;
 
     setIsDispatching(true);
+    setError(null);
     try {
       // First create the incident
       const incidentResponse = await fetch("/api/incidents", {
@@ -149,15 +216,14 @@ export default function TranscribePage() {
 
       if (dispatchResponse.ok) {
         const dispatchData = await dispatchResponse.json();
-        // Navigate to dispatch map with the incident highlighted
         router.push(`/dispatch?incidentId=${incident.id}&patrolId=${dispatchData.patrol.id}`);
       } else {
-        const error = await dispatchResponse.json();
-        alert(error.error || "Dispatch failed");
+        const errorData = await dispatchResponse.json();
+        setError(errorData.error || "Dispatch failed");
       }
-    } catch (error) {
-      console.error("Dispatch error:", error);
-      alert("Failed to dispatch patrol");
+    } catch (err) {
+      console.error("Dispatch error:", err);
+      setError("Failed to dispatch patrol");
     } finally {
       setIsDispatching(false);
     }
@@ -176,6 +242,13 @@ export default function TranscribePage() {
     }
   };
 
+  const clearTranscript = () => {
+    setTranscript("");
+    setInterimTranscript("");
+    setAnalysis(null);
+    setError(null);
+  };
+
   return (
     <main className="min-h-screen bg-background">
       {/* Header */}
@@ -192,14 +265,14 @@ export default function TranscribePage() {
           <div className="flex items-center gap-2">
             {isRecording && (
               <Badge variant="destructive" className="animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-white mr-2" />
-                Recording
+                <Radio className="w-3 h-3 mr-2" />
+                LIVE
               </Badge>
             )}
-            {isTranscribing && (
+            {isInitializing && (
               <Badge variant="secondary">
                 <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                Transcribing
+                Connecting...
               </Badge>
             )}
           </div>
@@ -207,31 +280,42 @@ export default function TranscribePage() {
       </header>
 
       <div className="container mx-auto px-4 py-8">
+        {error && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive">
+            {error}
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-2 gap-8">
           {/* Left Column - Recording & Transcript */}
           <div className="space-y-6">
             {/* Recording Controls */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Audio Recording</CardTitle>
+                <CardTitle className="text-lg">Live Audio Transcription</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-center py-8">
                   <div className="relative">
                     {isRecording && (
-                      <div className="absolute inset-0 rounded-full bg-destructive/30 animate-pulse-ring" />
+                      <>
+                        <div className="absolute inset-0 rounded-full bg-destructive/30 animate-ping" />
+                        <div className="absolute inset-0 rounded-full bg-destructive/20 animate-pulse" />
+                      </>
                     )}
                     <button
                       onClick={isRecording ? stopRecording : startRecording}
-                      disabled={isTranscribing}
+                      disabled={isInitializing}
                       className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all ${
                         isRecording
                           ? "bg-destructive hover:bg-destructive/90"
                           : "bg-primary hover:bg-primary/90"
-                      } ${isTranscribing ? "opacity-50 cursor-not-allowed" : ""}`}
+                      } ${isInitializing ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       {isRecording ? (
                         <Square className="w-10 h-10 text-destructive-foreground" />
+                      ) : isInitializing ? (
+                        <Loader2 className="w-10 h-10 text-primary-foreground animate-spin" />
                       ) : (
                         <Mic className="w-10 h-10 text-primary-foreground" />
                       )}
@@ -240,41 +324,54 @@ export default function TranscribePage() {
                 </div>
                 <p className="text-center text-sm text-muted-foreground">
                   {isRecording
-                    ? "Click to stop recording"
-                    : isTranscribing
-                    ? "Processing audio..."
-                    : "Click to start recording emergency call"}
+                    ? "Transcribing in real-time... Click to stop"
+                    : isInitializing
+                    ? "Connecting to Azure Speech Services..."
+                    : "Click to start live transcription"}
+                </p>
+                <p className="text-center text-xs text-muted-foreground">
+                  Powered by Azure Speech Services (UK English)
                 </p>
               </CardContent>
             </Card>
 
             {/* Transcript Display */}
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="text-lg">Transcript</CardTitle>
+                {transcript && (
+                  <Button variant="ghost" size="sm" onClick={clearTranscript}>
+                    Clear
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="min-h-[200px] p-4 rounded-lg bg-secondary/50 border border-border">
-                  {transcript ? (
+                  {transcript || interimTranscript ? (
                     <p className="text-foreground leading-relaxed whitespace-pre-wrap">
                       {transcript}
+                      {interimTranscript && (
+                        <span className="text-muted-foreground italic">
+                          {transcript ? " " : ""}{interimTranscript}
+                        </span>
+                      )}
                     </p>
                   ) : (
                     <p className="text-muted-foreground italic">
-                      Transcript will appear here after recording...
+                      Transcript will appear here in real-time as you speak...
                     </p>
                   )}
                 </div>
                 {transcript && !analysis && (
                   <Button
                     onClick={analyzeTranscript}
-                    disabled={isAnalyzing}
+                    disabled={isAnalyzing || isRecording}
                     className="w-full mt-4"
                   >
                     {isAnalyzing ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Analyzing...
+                        Analyzing with Azure OpenAI...
                       </>
                     ) : (
                       <>
@@ -375,7 +472,9 @@ export default function TranscribePage() {
                     No Analysis Yet
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    Record an emergency call and click analyze to see incident details
+                    Start recording an emergency call - transcript appears in real-time.
+                    <br />
+                    When ready, click analyze to extract incident details.
                   </p>
                 </CardContent>
               </Card>
