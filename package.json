@@ -1,45 +1,8 @@
 {
-  "name": "emergency-dispatch-system",
+  "name": "my-v0-project",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "@azure/openai": "^1.0.0-beta.12",
-    "microsoft-cognitiveservices-speech-sdk": "^1.34.0",
-    "@neondatabase/serverless": "^0.9.0",
-    "@radix-ui/react-dialog": "^1.0.5",
-    "@radix-ui/react-select": "^2.0.0",
-    "@radix-ui/react-slot": "^1.0.2",
-    "ai": "^6.0.0",
-    "@ai-sdk/azure": "^2.0.0",
-    "@ai-sdk/react": "^3.0.0",
-    "class-variance-authority": "^0.7.0",
-    "clsx": "^2.1.0",
-    "leaflet": "^1.9.4",
-    "lucide-react": "^0.468.0",
-    "next": "^15.0.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-leaflet": "^5.0.0",
-    "@react-leaflet/core": "^3.0.0",
-    "swr": "^2.2.5",
-    "tailwind-merge": "^2.2.1",
-    "zod": "^3.22.4",
-    "tailwindcss-animate": "^1.0.7"
-  },
-  "devDependencies": {
-    "@types/leaflet": "^1.9.8",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "autoprefixer": "^10.4.17",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "build": "echo 'no build script'"
   }
 }
