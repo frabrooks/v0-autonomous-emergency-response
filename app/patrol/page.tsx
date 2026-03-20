@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,15 @@ import {
   Shield,
 } from "lucide-react";
 import type { Patrol, Incident, IncidentSeverity } from "@/lib/types";
+
+const PatrolMiniMap = dynamic(() => import("@/components/patrol-mini-map"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-64 bg-secondary/50 rounded-lg flex items-center justify-center">
+      <p className="text-muted-foreground">Loading map...</p>
+    </div>
+  ),
+});
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -187,6 +197,27 @@ export default function PatrolPage() {
                   En Route
                 </Badge>
               </CardHeader>
+            </Card>
+
+            {/* Route Map */}
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MapPin className="w-4 h-4" />
+                  Route to Incident
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64 rounded-lg overflow-hidden border border-border">
+                  <PatrolMiniMap
+                    patrol={selectedPatrol}
+                    incident={assignedIncident}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">
+                  Dashed line shows route from your position to incident location
+                </p>
+              </CardContent>
             </Card>
 
             {/* Incident Details */}
