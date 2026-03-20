@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 // Distance threshold in meters to consider patrol "arrived" at incident
 const ARRIVAL_THRESHOLD_METERS = 50;
 
-// Number of route points to advance per simulation tick
-const ROUTE_ADVANCE_STEP = 3;
+// Number of route points to advance per simulation tick (5x faster than original for demo)
+const ROUTE_ADVANCE_STEP = 8;
 
 // Calculate distance between two points using Haversine formula
 function haversineDistance(
@@ -88,10 +88,9 @@ export async function POST() {
 
       if (hasArrived) {
         console.log("[v0] Patrol", patrol.id, "has ARRIVED at incident!");
-        // Patrol has arrived - resolve incident and make patrol available
+        // Patrol has arrived - delete incident and make patrol available
         await sql`
-          UPDATE incidents 
-          SET status = 'resolved', updated_at = NOW()
+          DELETE FROM incidents 
           WHERE id = ${patrol.target_incident_id}
         `;
 
