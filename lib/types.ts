@@ -8,6 +8,9 @@ export interface Patrol {
   latitude: number;
   longitude: number;
   status: PatrolStatus;
+  target_incident_id: number | null;
+  route_index: number | null;
+  route_coordinates: Array<[number, number]> | null;
   created_at: string;
   updated_at: string;
 }
