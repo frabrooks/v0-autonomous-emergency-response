@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Patrol, Incident } from "@/lib/types";
@@ -62,13 +62,7 @@ interface DispatchMapProps {
   selectedPatrolId?: number;
 }
 
-function MapUpdater({ center, zoom }: { center: [number, number]; zoom: number }) {
-  const map = useMap();
-  useEffect(() => {
-    map.setView(center, zoom);
-  }, [map, center, zoom]);
-  return null;
-}
+// Removed MapUpdater - it was resetting zoom on every data refresh
 
 export default function DispatchMap({
   patrols,
@@ -119,7 +113,6 @@ export default function DispatchMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <MapUpdater center={center} zoom={zoom} />
 
       {/* Patrol Markers */}
       {patrols.map((patrol) => {
