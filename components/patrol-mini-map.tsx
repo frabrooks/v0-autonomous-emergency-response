@@ -84,7 +84,7 @@ export default function PatrolMiniMap({ patrol, incident }: PatrolMiniMapProps) 
       center={patrolPos}
       zoom={14}
       className="w-full h-full"
-      style={{ background: "hsl(222 47% 11%)" }}
+      style={{ background: "hsl(210 20% 98%)" }}
       zoomControl={false}
     >
       <TileLayer
@@ -122,7 +122,7 @@ export default function PatrolMiniMap({ patrol, incident }: PatrolMiniMapProps) 
       {routeLine && (
         <Polyline
           positions={routeLine}
-          color="#3b82f6"
+          color="#1a365d"
           weight={4}
           dashArray="10, 10"
           opacity={0.8}

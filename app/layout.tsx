@@ -13,12 +13,12 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Emergency Dispatch System",
-  description: "AI-powered autonomous emergency response dispatch system",
+  title: "Emergency Dispatch System | Command & Control",
+  description: "Autonomous emergency response coordination system for call processing and patrol unit dispatch",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#1e293b",
+  themeColor: "#1a365d",
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         {children}
       </body>
