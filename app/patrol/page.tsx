@@ -68,18 +68,16 @@ export default function PatrolPage() {
   // Fetch all patrols for the select dropdown
   const { data: patrols } = useSWR<Patrol[]>("/api/patrols", fetcher);
 
-  // Poll for the selected patrol's case assignment every 1 second
+  // Poll for the selected patrol's data every 1 second
   const { data: patrolData, mutate: mutatePatrol } = useSWR<Patrol>(
     selectedPatrolId ? `/api/patrols/${selectedPatrolId}` : null,
     fetcher,
     { refreshInterval: 1000 }
   );
 
-  // Fetch incident details if patrol has a target incident
-  const { data: assignedIncident } = useSWR<Incident>(
-    patrolData?.target_incident_id
-      ? `/api/incidents/${patrolData.target_incident_id}`
-      : null,
+  // Poll for incident assigned to this patrol (via assigned_patrol_id on incident)
+  const { data: assignedIncident } = useSWR<Incident | null>(
+    selectedPatrolId ? `/api/patrols/${selectedPatrolId}/incident` : null,
     fetcher,
     { refreshInterval: 1000 }
   );
@@ -177,7 +175,7 @@ export default function PatrolPage() {
               </p>
             </CardContent>
           </Card>
-        ) : selectedPatrol && selectedPatrol.status === "dispatched" && selectedPatrol.target_incident_id ? (
+        ) : selectedPatrol && assignedIncident ? (
           /* Active Dispatch */
           <div className="max-w-4xl mx-auto space-y-6">
             {/* Current Assignment */}
