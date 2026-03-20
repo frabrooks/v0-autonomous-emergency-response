@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -8,7 +8,7 @@ import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Radio, MapPin, Users, AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Radio, MapPin, Users, AlertTriangle, RefreshCw, Play, Pause } from "lucide-react";
 import type { Patrol, Incident, IncidentSeverity } from "@/lib/types";
 
 const DispatchMap = dynamic(() => import("@/components/dispatch-map"), {
@@ -77,6 +77,49 @@ function DispatchContent() {
     mutate: mutateIncidents,
   } = useSWR<Incident[]>("/api/incidents", fetcher, { refreshInterval: 5000 });
 
+  // Simulation state
+  const [isSimulating, setIsSimulating] = useState(false);
+  const simulationRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Run simulation - advances patrol positions along routes
+  const runSimulation = async () => {
+    try {
+      const res = await fetch("/api/simulate", { method: "POST" });
+      if (res.ok) {
+        // Refresh data to show updated positions
+        mutatePatrols();
+        mutateIncidents();
+      }
+    } catch (error) {
+      console.error("Simulation error:", error);
+    }
+  };
+
+  // Toggle simulation on/off
+  const toggleSimulation = () => {
+    if (isSimulating) {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+        simulationRef.current = null;
+      }
+      setIsSimulating(false);
+    } else {
+      // Run immediately and then every 2 seconds
+      runSimulation();
+      simulationRef.current = setInterval(runSimulation, 2000);
+      setIsSimulating(true);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+      }
+    };
+  }, []);
+
   const isLoading = !patrols || !incidents;
   const hasError = patrolsError || incidentsError;
 
@@ -103,6 +146,23 @@ function DispatchContent() {
             <h1 className="text-lg font-semibold">Emergency Dispatch Map</h1>
           </div>
           <div className="flex items-center gap-4">
+            <Button 
+              variant={isSimulating ? "destructive" : "default"} 
+              size="sm" 
+              onClick={toggleSimulation}
+            >
+              {isSimulating ? (
+                <>
+                  <Pause className="w-4 h-4 mr-2" />
+                  Stop Simulation
+                </>
+              ) : (
+                <>
+                  <Play className="w-4 h-4 mr-2" />
+                  Start Simulation
+                </>
+              )}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleRefresh}>
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh

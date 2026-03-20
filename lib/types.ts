@@ -8,6 +8,9 @@ export interface Patrol {
   latitude: number;
   longitude: number;
   status: PatrolStatus;
+  route_coordinates: [number, number][] | null; // [lng, lat] pairs from OSRM
+  route_index: number; // Current position along the route
+  target_incident_id: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -34,4 +37,19 @@ export interface DispatchResult {
 export interface TranscriptionChunk {
   text: string;
   timestamp: number;
+}
+
+// OSRM API types
+export interface OSRMRoute {
+  geometry: {
+    coordinates: [number, number][]; // [lng, lat] pairs
+    type: string;
+  };
+  distance: number; // meters
+  duration: number; // seconds
+}
+
+export interface OSRMResponse {
+  code: string;
+  routes: OSRMRoute[];
 }

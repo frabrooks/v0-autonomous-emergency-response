@@ -1,6 +1,37 @@
 import { sql } from "@/lib/db";
 import { NextResponse } from "next/server";
-import type { Patrol, Incident } from "@/lib/types";
+import type { Patrol, Incident, OSRMResponse } from "@/lib/types";
+
+// Fetch route from OSRM public API
+async function fetchOSRMRoute(
+  fromLat: number,
+  fromLng: number,
+  toLat: number,
+  toLng: number
+): Promise<[number, number][] | null> {
+  try {
+    // OSRM expects coordinates as lng,lat
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error("OSRM API error:", response.status);
+      return null;
+    }
+    
+    const data: OSRMResponse = await response.json();
+    
+    if (data.code !== "Ok" || !data.routes || data.routes.length === 0) {
+      console.error("OSRM returned no routes:", data.code);
+      return null;
+    }
+    
+    return data.routes[0].geometry.coordinates;
+  } catch (error) {
+    console.error("Failed to fetch OSRM route:", error);
+    return null;
+  }
+}
 
 // Generate direction based on coordinate differences
 function getDirection(fromLat: number, fromLon: number, toLat: number, toLon: number): string {
@@ -100,9 +131,22 @@ export async function POST(request: Request) {
       distanceKm
     );
 
-    // Update patrol status to dispatched
+    // Fetch the route from OSRM
+    const routeCoordinates = await fetchOSRMRoute(
+      nearestPatrol.latitude,
+      nearestPatrol.longitude,
+      incident.latitude,
+      incident.longitude
+    );
+
+    // Update patrol status to dispatched with route data
     await sql`
-      UPDATE patrols SET status = 'dispatched', updated_at = NOW()
+      UPDATE patrols SET 
+        status = 'dispatched', 
+        route_coordinates = ${routeCoordinates ? JSON.stringify(routeCoordinates) : null}::jsonb,
+        route_index = 0,
+        target_incident_id = ${incidentId},
+        updated_at = NOW()
       WHERE id = ${nearestPatrol.id}
     `;
 
