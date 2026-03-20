@@ -6,10 +6,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Patrol, Incident } from "@/lib/types";
 
-// Fix default marker icons
-const patrolIcon = new L.DivIcon({
+// Patrol icon - Green for available
+const availablePatrolIcon = new L.DivIcon({
   className: "custom-marker",
-  html: `<div class="w-8 h-8 rounded-full bg-primary border-2 border-white shadow-lg flex items-center justify-center">
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background-color: #22c55e; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
   </div>`,
   iconSize: [32, 32],
@@ -17,9 +17,21 @@ const patrolIcon = new L.DivIcon({
   popupAnchor: [0, -32],
 });
 
+// Patrol icon - Red for busy/unavailable
+const busyPatrolIcon = new L.DivIcon({
+  className: "custom-marker",
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background-color: #ef4444; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
+  </div>`,
+  iconSize: [32, 32],
+  iconAnchor: [16, 32],
+  popupAnchor: [0, -32],
+});
+
+// Patrol icon - Orange/Yellow for dispatched (en route)
 const dispatchedPatrolIcon = new L.DivIcon({
   className: "custom-marker",
-  html: `<div class="w-8 h-8 rounded-full bg-warning border-2 border-white shadow-lg flex items-center justify-center animate-pulse">
+  html: `<div style="width: 32px; height: 32px; border-radius: 50%; background-color: #f59e0b; border: 2px solid white; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center; animation: pulse 2s infinite;">
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
   </div>`,
   iconSize: [32, 32],
@@ -109,11 +121,19 @@ export default function DispatchMap({
       <MapUpdater center={center} zoom={zoom} />
 
       {/* Patrol Markers */}
-      {patrols.map((patrol) => (
+      {patrols.map((patrol) => {
+        // Determine icon based on status: green = available, red = busy, orange = dispatched
+        const icon = patrol.status === "available" 
+          ? availablePatrolIcon 
+          : patrol.status === "dispatched" 
+            ? dispatchedPatrolIcon 
+            : busyPatrolIcon;
+        
+        return (
         <Marker
           key={`patrol-${patrol.id}`}
           position={[parseCoord(patrol.latitude), parseCoord(patrol.longitude)]}
-          icon={patrol.status === "dispatched" ? dispatchedPatrolIcon : patrolIcon}
+          icon={icon}
         >
           <Popup>
             <div className="text-sm">
@@ -122,7 +142,8 @@ export default function DispatchMap({
             </div>
           </Popup>
         </Marker>
-      ))}
+        );
+      })}
 
       {/* Incident Markers */}
       {incidents.map((incident) => (
