@@ -1,11 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   Radio,
@@ -15,6 +22,7 @@ import {
   CheckCircle,
   Clock,
   RefreshCw,
+  User,
 } from "lucide-react";
 import type { Patrol, Incident, IncidentSeverity } from "@/lib/types";
 
@@ -33,28 +41,46 @@ function getSeverityVariant(severity: IncidentSeverity) {
   }
 }
 
+function formatCoordinate(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "N/A";
+  const num = Number(value);
+  if (isNaN(num)) return "N/A";
+  return num.toFixed(6);
+}
+
 export default function PatrolPage() {
   const [selectedPatrolId, setSelectedPatrolId] = useState<number | null>(null);
+  const [isPatrolSelected, setIsPatrolSelected] = useState(false);
 
+  // Fetch all patrols for selection
   const { data: patrols, mutate: mutatePatrols } = useSWR<Patrol[]>(
     "/api/patrols",
     fetcher,
-    { refreshInterval: 3000 }
+    { refreshInterval: isPatrolSelected ? 1000 : 5000 } // Poll faster once patrol is selected
   );
 
-  const { data: incidents } = useSWR<
+  // Fetch incidents, polling every second once a patrol is selected
+  const { data: incidents, mutate: mutateIncidents } = useSWR<
     (Incident & { assigned_patrol_call_sign?: string })[]
-  >("/api/incidents", fetcher, { refreshInterval: 3000 });
+  >("/api/incidents", fetcher, { refreshInterval: isPatrolSelected ? 1000 : 5000 });
 
-  // Find dispatched patrol and their assigned incident
-  const dispatchedPatrols = patrols?.filter((p) => p.status === "dispatched") || [];
+  // Get the selected patrol
   const selectedPatrol = selectedPatrolId
     ? patrols?.find((p) => p.id === selectedPatrolId)
-    : dispatchedPatrols[0];
+    : null;
 
+  // Find incident assigned to selected patrol
   const assignedIncident = selectedPatrol
     ? incidents?.find((i) => i.assigned_patrol_id === selectedPatrol.id)
     : null;
+
+  // Check if patrol has an active dispatch (status is 'assigned')
+  const isDispatched = selectedPatrol?.status === "assigned";
+
+  const handleSelectPatrol = (patrolId: string) => {
+    setSelectedPatrolId(Number(patrolId));
+    setIsPatrolSelected(true);
+  };
 
   const handleAcknowledge = async () => {
     // In a real app, this would update the patrol status
@@ -62,17 +88,93 @@ export default function PatrolPage() {
   };
 
   const handleComplete = async () => {
-    if (!assignedIncident) return;
+    if (!assignedIncident || !selectedPatrol) return;
 
-    // Mark incident as resolved and patrol as available
     try {
-      // This would be a proper API call in production
+      // Mark incident as resolved
+      await fetch(`/api/incidents/${assignedIncident.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "resolved" }),
+      });
+
+      // Mark patrol as available
+      await fetch(`/api/patrols/${selectedPatrol.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "available" }),
+      });
+
       alert("Incident marked as resolved. Patrol returning to available status.");
       mutatePatrols();
+      mutateIncidents();
     } catch (error) {
       console.error("Error completing incident:", error);
     }
   };
+
+  // Show patrol selection if no patrol is selected
+  if (!isPatrolSelected) {
+    return (
+      <main className="min-h-screen bg-background">
+        {/* Header */}
+        <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
+          <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Link href="/">
+                <Button variant="ghost" size="icon">
+                  <ArrowLeft className="w-5 h-5" />
+                </Button>
+              </Link>
+              <h1 className="text-xl font-semibold">Patrol Unit Login</h1>
+            </div>
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-8">
+          <Card className="max-w-md mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="w-5 h-5" />
+                Select Your Patrol Unit
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-muted-foreground text-sm">
+                Select your patrol unit to receive dispatch assignments and incident details.
+              </p>
+              <Select onValueChange={handleSelectPatrol}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose patrol unit..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {patrols?.map((patrol) => (
+                    <SelectItem key={patrol.id} value={patrol.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        {patrol.call_sign}
+                        <Badge
+                          variant={
+                            patrol.status === "available"
+                              ? "success"
+                              : patrol.status === "assigned"
+                              ? "warning"
+                              : "secondary"
+                          }
+                          className="ml-2"
+                        >
+                          {patrol.status}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </CardContent>
+          </Card>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-background">
@@ -80,90 +182,88 @@ export default function PatrolPage() {
       <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-10">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link href="/">
-              <Button variant="ghost" size="icon">
-                <ArrowLeft className="w-5 h-5" />
-              </Button>
-            </Link>
-            <h1 className="text-xl font-semibold">Patrol Instructions</h1>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                setIsPatrolSelected(false);
+                setSelectedPatrolId(null);
+              }}
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h1 className="text-xl font-semibold">
+              {selectedPatrol?.call_sign || "Patrol"} - Instructions
+            </h1>
           </div>
           <div className="flex items-center gap-4">
-            <Button variant="outline" size="sm" onClick={() => mutatePatrols()}>
+            <Badge
+              variant={
+                selectedPatrol?.status === "available"
+                  ? "success"
+                  : selectedPatrol?.status === "assigned"
+                  ? "warning"
+                  : "secondary"
+              }
+            >
+              {selectedPatrol?.status?.toUpperCase() || "UNKNOWN"}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                mutatePatrols();
+                mutateIncidents();
+              }}
+            >
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
             </Button>
-            <Link href="/dispatch">
-              <Button variant="outline" size="sm">
-                <MapPin className="w-4 h-4 mr-2" />
-                View Map
-              </Button>
-            </Link>
           </div>
         </div>
       </header>
 
       <div className="container mx-auto px-4 py-8">
-        {dispatchedPatrols.length === 0 ? (
+        {!isDispatched ? (
           /* No Active Dispatch */
           <Card className="max-w-lg mx-auto">
             <CardContent className="py-16 text-center">
               <Radio className="w-16 h-16 mx-auto text-muted-foreground/50 mb-4" />
-              <h2 className="text-xl font-semibold mb-2">No Active Dispatch</h2>
-              <p className="text-muted-foreground mb-6">
-                You are currently not assigned to any incident. Stand by for dispatch.
+              <h2 className="text-xl font-semibold mb-2">Standing By</h2>
+              <p className="text-muted-foreground mb-2">
+                Unit {selectedPatrol?.call_sign} is currently available.
               </p>
-              <Link href="/transcribe">
-                <Button>
-                  <Radio className="w-4 h-4 mr-2" />
-                  Process New Call
-                </Button>
-              </Link>
+              <p className="text-sm text-muted-foreground mb-6">
+                Polling for new dispatch assignments...
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                Connected - Auto-refreshing every second
+              </div>
             </CardContent>
           </Card>
         ) : (
           <div className="max-w-4xl mx-auto space-y-6">
-            {/* Patrol Selector (if multiple dispatched) */}
-            {dispatchedPatrols.length > 1 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Select Unit</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2 flex-wrap">
-                    {dispatchedPatrols.map((patrol) => (
-                      <Button
-                        key={patrol.id}
-                        variant={selectedPatrol?.id === patrol.id ? "default" : "outline"}
-                        onClick={() => setSelectedPatrolId(patrol.id)}
-                      >
-                        {patrol.call_sign}
-                      </Button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
             {/* Current Assignment */}
-            {selectedPatrol && (
-              <Card className="border-warning/50">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center">
-                      <Navigation className="w-6 h-6 text-warning" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-xl">{selectedPatrol.call_sign}</CardTitle>
-                      <p className="text-sm text-muted-foreground">Active Dispatch</p>
-                    </div>
+            <Card className="border-warning/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-warning/20 flex items-center justify-center">
+                    <Navigation className="w-6 h-6 text-warning" />
                   </div>
-                  <Badge variant="warning" className="text-sm">
-                    <Clock className="w-3 h-3 mr-1" />
-                    En Route
-                  </Badge>
-                </CardHeader>
-              </Card>
-            )}
+                  <div>
+                    <CardTitle className="text-xl">
+                      {selectedPatrol?.call_sign}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground">Active Dispatch</p>
+                  </div>
+                </div>
+                <Badge variant="warning" className="text-sm">
+                  <Clock className="w-3 h-3 mr-1" />
+                  En Route
+                </Badge>
+              </CardHeader>
+            </Card>
 
             {/* Incident Details */}
             {assignedIncident ? (
@@ -182,7 +282,7 @@ export default function PatrolPage() {
                       </div>
                     </div>
                     <Badge variant={getSeverityVariant(assignedIncident.severity)}>
-                      {assignedIncident.severity.toUpperCase()}
+                      {assignedIncident.severity?.toUpperCase() || "UNKNOWN"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -192,7 +292,9 @@ export default function PatrolPage() {
                     <h4 className="text-sm font-medium text-muted-foreground mb-2">
                       Description
                     </h4>
-                    <p className="text-foreground text-lg">{assignedIncident.description}</p>
+                    <p className="text-foreground text-lg">
+                      {assignedIncident.description || "No description available"}
+                    </p>
                   </div>
 
                   {/* Location */}
@@ -203,19 +305,21 @@ export default function PatrolPage() {
                     <div className="flex items-center gap-2">
                       <MapPin className="w-5 h-5 text-primary" />
                       <span className="font-mono">
-                        {assignedIncident.latitude.toFixed(6)},{" "}
-                        {assignedIncident.longitude.toFixed(6)}
+                        {formatCoordinate(assignedIncident.latitude)},{" "}
+                        {formatCoordinate(assignedIncident.longitude)}
                       </span>
                     </div>
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${assignedIncident.latitude},${assignedIncident.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 mt-2 text-sm text-primary hover:underline"
-                    >
-                      <Navigation className="w-4 h-4" />
-                      Open in Google Maps
-                    </a>
+                    {assignedIncident.latitude && assignedIncident.longitude && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${assignedIncident.latitude},${assignedIncident.longitude}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 mt-2 text-sm text-primary hover:underline"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        Open in Google Maps
+                      </a>
+                    )}
                   </div>
 
                   {/* Transcript */}

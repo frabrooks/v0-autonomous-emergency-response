@@ -100,9 +100,9 @@ export async function POST(request: Request) {
       distanceKm
     );
 
-    // Update patrol status to dispatched
+    // Update patrol status to assigned
     await sql`
-      UPDATE patrols SET status = 'dispatched', updated_at = NOW()
+      UPDATE patrols SET status = 'assigned', updated_at = NOW()
       WHERE id = ${nearestPatrol.id}
     `;
 
