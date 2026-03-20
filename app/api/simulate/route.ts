@@ -29,6 +29,13 @@ function haversineDistance(
 
 export async function POST() {
   try {
+    // First check what patrols exist
+    const allPatrols = await sql`
+      SELECT id, call_sign, status, route_coordinates IS NOT NULL as has_route, target_incident_id
+      FROM patrols
+    `;
+    console.log("[v0] All patrols:", JSON.stringify(allPatrols, null, 2));
+
     // Get all dispatched patrols with route data
     const dispatchedPatrols = await sql`
       SELECT 
@@ -46,30 +53,41 @@ export async function POST() {
         AND p.route_coordinates IS NOT NULL
         AND p.target_incident_id IS NOT NULL
     `;
+    
+    console.log("[v0] Dispatched patrols with routes:", dispatchedPatrols.length);
 
     const updates: { patrolId: number; resolved: boolean }[] = [];
 
     for (const patrol of dispatchedPatrols) {
       const routeCoords = patrol.route_coordinates as [number, number][];
-      let currentIndex = patrol.route_index || 0;
+      const currentIndex = typeof patrol.route_index === 'string' ? parseInt(patrol.route_index) : (patrol.route_index || 0);
+      
+      console.log("[v0] Processing patrol", patrol.id, "at route index", currentIndex, "of", routeCoords.length);
       
       // Advance position along the route
       const newIndex = Math.min(currentIndex + ROUTE_ADVANCE_STEP, routeCoords.length - 1);
       const newPosition = routeCoords[newIndex]; // [lng, lat]
-      const newLng = newPosition[0];
-      const newLat = newPosition[1];
+      const newLng = typeof newPosition[0] === 'string' ? parseFloat(newPosition[0]) : newPosition[0];
+      const newLat = typeof newPosition[1] === 'string' ? parseFloat(newPosition[1]) : newPosition[1];
+
+      // Parse incident coordinates (DB may return strings)
+      const incidentLat = typeof patrol.incident_lat === 'string' ? parseFloat(patrol.incident_lat) : patrol.incident_lat;
+      const incidentLng = typeof patrol.incident_lng === 'string' ? parseFloat(patrol.incident_lng) : patrol.incident_lng;
 
       // Check distance to incident
       const distanceToIncident = haversineDistance(
         newLat,
         newLng,
-        patrol.incident_lat,
-        patrol.incident_lng
+        incidentLat,
+        incidentLng
       );
+      
+      console.log("[v0] Patrol", patrol.id, "new pos:", { newLat, newLng }, "distance to incident:", distanceToIncident, "m");
 
       const hasArrived = distanceToIncident <= ARRIVAL_THRESHOLD_METERS || newIndex >= routeCoords.length - 1;
 
       if (hasArrived) {
+        console.log("[v0] Patrol", patrol.id, "has ARRIVED at incident!");
         // Patrol has arrived - resolve incident and make patrol available
         await sql`
           UPDATE incidents 
@@ -81,9 +99,9 @@ export async function POST() {
           UPDATE patrols 
           SET 
             status = 'available',
-            latitude = ${patrol.incident_lat},
-            longitude = ${patrol.incident_lng},
-            location = ST_SetSRID(ST_MakePoint(${patrol.incident_lng}, ${patrol.incident_lat}), 4326)::geography,
+            latitude = ${incidentLat},
+            longitude = ${incidentLng},
+            location = ST_SetSRID(ST_MakePoint(${incidentLng}, ${incidentLat}), 4326)::geography,
             route_coordinates = NULL,
             route_index = 0,
             target_incident_id = NULL,

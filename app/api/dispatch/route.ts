@@ -131,13 +131,23 @@ export async function POST(request: Request) {
       distanceKm
     );
 
+    // Parse coordinates to numbers (DB may return strings)
+    const patrolLat = typeof nearestPatrol.latitude === 'string' ? parseFloat(nearestPatrol.latitude) : nearestPatrol.latitude;
+    const patrolLng = typeof nearestPatrol.longitude === 'string' ? parseFloat(nearestPatrol.longitude) : nearestPatrol.longitude;
+    const incidentLat = typeof incident.latitude === 'string' ? parseFloat(incident.latitude) : incident.latitude;
+    const incidentLng = typeof incident.longitude === 'string' ? parseFloat(incident.longitude) : incident.longitude;
+
+    console.log("[v0] Fetching route from patrol", { patrolLat, patrolLng }, "to incident", { incidentLat, incidentLng });
+
     // Fetch the route from OSRM
     const routeCoordinates = await fetchOSRMRoute(
-      nearestPatrol.latitude,
-      nearestPatrol.longitude,
-      incident.latitude,
-      incident.longitude
+      patrolLat,
+      patrolLng,
+      incidentLat,
+      incidentLng
     );
+    
+    console.log("[v0] OSRM route received:", routeCoordinates ? `${routeCoordinates.length} points` : "null");
 
     // Update patrol status to dispatched with route data
     await sql`

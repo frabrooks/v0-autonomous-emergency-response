@@ -84,14 +84,17 @@ function DispatchContent() {
   // Run simulation - advances patrol positions along routes
   const runSimulation = async () => {
     try {
+      console.log("[v0] Running simulation...");
       const res = await fetch("/api/simulate", { method: "POST" });
+      const data = await res.json();
+      console.log("[v0] Simulation response:", data);
       if (res.ok) {
         // Refresh data to show updated positions
         mutatePatrols();
         mutateIncidents();
       }
     } catch (error) {
-      console.error("Simulation error:", error);
+      console.error("[v0] Simulation error:", error);
     }
   };
 
