@@ -38,3 +38,18 @@ export interface TranscriptionChunk {
   text: string;
   timestamp: number;
 }
+
+// OSRM API types
+export interface OSRMRoute {
+  geometry: {
+    coordinates: [number, number][]; // [lng, lat] pairs
+    type: string;
+  };
+  distance: number; // meters
+  duration: number; // seconds
+}
+
+export interface OSRMResponse {
+  code: string;
+  routes: OSRMRoute[];
+}
