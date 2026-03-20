@@ -74,8 +74,8 @@ export default function PatrolPage() {
     ? incidents?.find((i) => i.assigned_patrol_id === selectedPatrol.id)
     : null;
 
-  // Check if patrol has an active dispatch
-  const isDispatched = selectedPatrol?.status === "dispatched";
+  // Check if patrol has an active dispatch (status is 'assigned')
+  const isDispatched = selectedPatrol?.status === "assigned";
 
   const handleSelectPatrol = (patrolId: string) => {
     setSelectedPatrolId(Number(patrolId));
@@ -156,7 +156,7 @@ export default function PatrolPage() {
                           variant={
                             patrol.status === "available"
                               ? "success"
-                              : patrol.status === "dispatched"
+                              : patrol.status === "assigned"
                               ? "warning"
                               : "secondary"
                           }
@@ -201,7 +201,7 @@ export default function PatrolPage() {
               variant={
                 selectedPatrol?.status === "available"
                   ? "success"
-                  : selectedPatrol?.status === "dispatched"
+                  : selectedPatrol?.status === "assigned"
                   ? "warning"
                   : "secondary"
               }
