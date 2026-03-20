@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import useSWR from "swr";
@@ -64,6 +64,8 @@ function getStatusBadge(status: Patrol["status"]) {
 
 export default function PatrolPage() {
   const [selectedPatrolId, setSelectedPatrolId] = useState<string>("");
+  const [isSimulating, setIsSimulating] = useState(false);
+  const simulationRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch all patrols for the select dropdown
   const { data: patrols } = useSWR<Patrol[]>("/api/patrols", fetcher);
@@ -84,9 +86,42 @@ export default function PatrolPage() {
 
   const selectedPatrol = patrolData;
 
+  // Run simulation - advances patrol positions along routes
+  const runSimulation = async () => {
+    try {
+      const res = await fetch("/api/simulate", { method: "POST" });
+      if (res.ok) {
+        // Refresh patrol data to show updated position
+        mutatePatrol();
+      }
+    } catch (error) {
+      console.error("Simulation error:", error);
+    }
+  };
+
+  // Cleanup simulation on unmount
+  useEffect(() => {
+    return () => {
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+      }
+    };
+  }, []);
+
   const handleAcknowledge = async () => {
-    // In a real app, this would update the patrol status
-    alert("Dispatch acknowledged. Proceeding to incident location.");
+    if (isSimulating) {
+      // Stop simulation
+      if (simulationRef.current) {
+        clearInterval(simulationRef.current);
+        simulationRef.current = null;
+      }
+      setIsSimulating(false);
+    } else {
+      // Start simulation - run immediately and then every 1000ms
+      runSimulation();
+      simulationRef.current = setInterval(runSimulation, 1000);
+      setIsSimulating(true);
+    }
   };
 
   const handleComplete = async () => {
@@ -287,9 +322,13 @@ export default function PatrolPage() {
 
                   {/* Actions */}
                   <div className="flex gap-4 pt-4 border-t border-border">
-                    <Button onClick={handleAcknowledge} className="flex-1">
+                    <Button 
+                      onClick={handleAcknowledge} 
+                      variant={isSimulating ? "destructive" : "default"}
+                      className="flex-1"
+                    >
                       <Radio className="w-4 h-4 mr-2" />
-                      Acknowledge Dispatch
+                      {isSimulating ? "Stop Simulation" : "Acknowledge Dispatch"}
                     </Button>
                     <Button
                       onClick={handleComplete}
