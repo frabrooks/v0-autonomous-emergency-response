@@ -37,6 +37,12 @@ const incidentIcon = new L.DivIcon({
   popupAnchor: [0, -40],
 });
 
+// Helper to safely parse coordinates from DB (may be string or number)
+function parseCoord(value: number | string | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  return typeof value === "string" ? parseFloat(value) : value;
+}
+
 interface DispatchMapProps {
   patrols: Patrol[];
   incidents: Incident[];
@@ -84,8 +90,8 @@ export default function DispatchMap({
   const routeLine =
     selectedIncident && selectedPatrol
       ? [
-          [selectedPatrol.latitude, selectedPatrol.longitude] as [number, number],
-          [selectedIncident.latitude, selectedIncident.longitude] as [number, number],
+          [parseCoord(selectedPatrol.latitude), parseCoord(selectedPatrol.longitude)] as [number, number],
+          [parseCoord(selectedIncident.latitude), parseCoord(selectedIncident.longitude)] as [number, number],
         ]
       : null;
 
@@ -106,7 +112,7 @@ export default function DispatchMap({
       {patrols.map((patrol) => (
         <Marker
           key={`patrol-${patrol.id}`}
-          position={[patrol.latitude, patrol.longitude]}
+          position={[parseCoord(patrol.latitude), parseCoord(patrol.longitude)]}
           icon={patrol.status === "dispatched" ? dispatchedPatrolIcon : patrolIcon}
         >
           <Popup>
@@ -122,7 +128,7 @@ export default function DispatchMap({
       {incidents.map((incident) => (
         <Marker
           key={`incident-${incident.id}`}
-          position={[incident.latitude, incident.longitude]}
+          position={[parseCoord(incident.latitude), parseCoord(incident.longitude)]}
           icon={incidentIcon}
         >
           <Popup>

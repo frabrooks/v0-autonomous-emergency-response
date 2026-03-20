@@ -22,6 +22,14 @@ const DispatchMap = dynamic(() => import("@/components/dispatch-map"), {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+// Helper to safely format coordinates (handles string/number from DB)
+function formatCoord(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return "N/A";
+  const num = typeof value === "string" ? parseFloat(value) : value;
+  if (isNaN(num)) return "N/A";
+  return num.toFixed(4);
+}
+
 function getSeverityVariant(severity: IncidentSeverity) {
   switch (severity) {
     case "critical":
@@ -163,7 +171,7 @@ function DispatchContent() {
                           </Badge>
                         </div>
                         <p className="text-xs text-muted-foreground mt-1 font-mono">
-                          {patrol.latitude.toFixed(4)}, {patrol.longitude.toFixed(4)}
+                          {formatCoord(patrol.latitude)}, {formatCoord(patrol.longitude)}
                         </p>
                       </CardContent>
                     </Card>
@@ -210,7 +218,7 @@ function DispatchContent() {
                           <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                             <MapPin className="w-3 h-3" />
                             <span className="font-mono">
-                              {incident.latitude.toFixed(4)}, {incident.longitude.toFixed(4)}
+                              {formatCoord(incident.latitude)}, {formatCoord(incident.longitude)}
                             </span>
                           </div>
                           {(incident as Incident & { assigned_patrol_call_sign?: string })
