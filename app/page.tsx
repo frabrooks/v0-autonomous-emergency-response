@@ -11,10 +11,10 @@ export default function HomePage() {
         <div className="space-y-4">
           <div className="flex justify-center">
             <div className="relative">
-              <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center">
-                <Shield className="w-10 h-10 text-primary" />
+              <div className="w-20 h-20 rounded-full bg-primary flex items-center justify-center shadow-lg">
+                <Shield className="w-10 h-10 text-primary-foreground" />
               </div>
-              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-success flex items-center justify-center">
+              <div className="absolute -top-1 -right-1 w-6 h-6 rounded-full bg-success flex items-center justify-center shadow">
                 <Radio className="w-3 h-3 text-success-foreground" />
               </div>
             </div>
@@ -23,31 +23,37 @@ export default function HomePage() {
             Emergency Dispatch System
           </h1>
           <p className="text-lg text-muted-foreground max-w-md mx-auto text-pretty">
-            AI-powered autonomous response system for emergency call processing and patrol dispatch
+            Autonomous response coordination for emergency call processing and patrol unit dispatch
           </p>
         </div>
 
         {/* Feature Cards */}
         <div className="grid grid-cols-3 gap-4">
-          <Card className="bg-card/50 border-border/50">
+          <Card className="bg-card border shadow-sm">
             <CardContent className="pt-6 text-center space-y-2">
-              <Radio className="w-8 h-8 mx-auto text-primary" />
-              <p className="text-sm font-medium">Live Transcription</p>
-              <p className="text-xs text-muted-foreground">Real-time audio processing</p>
+              <div className="w-12 h-12 mx-auto rounded-full bg-primary/10 flex items-center justify-center">
+                <Radio className="w-6 h-6 text-primary" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Live Transcription</p>
+              <p className="text-xs text-muted-foreground">Real-time call processing</p>
             </CardContent>
           </Card>
-          <Card className="bg-card/50 border-border/50">
+          <Card className="bg-card border shadow-sm">
             <CardContent className="pt-6 text-center space-y-2">
-              <AlertTriangle className="w-8 h-8 mx-auto text-warning" />
-              <p className="text-sm font-medium">AI Analysis</p>
-              <p className="text-xs text-muted-foreground">Automatic threat assessment</p>
+              <div className="w-12 h-12 mx-auto rounded-full bg-warning/10 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-warning" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Incident Analysis</p>
+              <p className="text-xs text-muted-foreground">Automatic severity assessment</p>
             </CardContent>
           </Card>
-          <Card className="bg-card/50 border-border/50">
+          <Card className="bg-card border shadow-sm">
             <CardContent className="pt-6 text-center space-y-2">
-              <MapPin className="w-8 h-8 mx-auto text-success" />
-              <p className="text-sm font-medium">Smart Dispatch</p>
-              <p className="text-xs text-muted-foreground">Nearest unit assignment</p>
+              <div className="w-12 h-12 mx-auto rounded-full bg-success/10 flex items-center justify-center">
+                <MapPin className="w-6 h-6 text-success" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">Unit Dispatch</p>
+              <p className="text-xs text-muted-foreground">Nearest patrol assignment</p>
             </CardContent>
           </Card>
         </div>

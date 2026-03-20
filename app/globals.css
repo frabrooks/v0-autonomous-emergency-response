@@ -4,30 +4,37 @@
 
 @layer base {
   :root {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 142 76% 36%;
-    --success-foreground: 210 40% 98%;
+    /* Met Police inspired - Light professional theme */
+    --background: 210 20% 98%;
+    --foreground: 220 40% 13%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 40% 13%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 40% 13%;
+    /* Met Police Navy Blue */
+    --primary: 220 70% 25%;
+    --primary-foreground: 0 0% 100%;
+    /* Light blue-grey for secondary elements */
+    --secondary: 210 25% 93%;
+    --secondary-foreground: 220 40% 13%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 220 15% 46%;
+    /* Subtle blue accent */
+    --accent: 210 40% 96%;
+    --accent-foreground: 220 70% 25%;
+    /* Emergency red */
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    /* Success green */
+    --success: 142 72% 29%;
+    --success-foreground: 0 0% 100%;
+    /* Warning amber */
     --warning: 38 92% 50%;
-    --warning-foreground: 222 47% 11%;
-    --border: 217 33% 25%;
-    --input: 217 33% 25%;
-    --ring: 217 91% 60%;
-    --radius: 0.5rem;
+    --warning-foreground: 220 40% 13%;
+    --border: 214 20% 84%;
+    --input: 214 20% 84%;
+    --ring: 220 70% 25%;
+    --radius: 0.375rem;
   }
 }
 
@@ -40,23 +47,23 @@
   }
 }
 
-/* Leaflet map overrides for dark theme */
+/* Leaflet map overrides for light theme */
 .leaflet-container {
-  background: hsl(222 47% 11%);
+  background: hsl(210 20% 98%);
 }
 
 .leaflet-tile-pane {
-  filter: brightness(0.7) saturate(0.8);
+  filter: none;
 }
 
 .leaflet-control-zoom a {
-  background: hsl(222 47% 14%) !important;
-  color: hsl(210 40% 98%) !important;
-  border-color: hsl(217 33% 25%) !important;
+  background: hsl(0 0% 100%) !important;
+  color: hsl(220 40% 13%) !important;
+  border-color: hsl(214 20% 84%) !important;
 }
 
 .leaflet-control-zoom a:hover {
-  background: hsl(217 33% 17%) !important;
+  background: hsl(210 20% 96%) !important;
 }
 
 /* Custom scrollbar */
@@ -66,16 +73,16 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(222 47% 11%);
+  background: hsl(210 20% 96%);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(217 33% 25%);
+  background: hsl(214 20% 78%);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(217 33% 35%);
+  background: hsl(220 70% 25%);
 }
 
 /* Pulsing animation for active recording */

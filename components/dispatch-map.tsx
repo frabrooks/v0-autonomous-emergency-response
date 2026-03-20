@@ -107,7 +107,7 @@ export default function DispatchMap({
       center={center}
       zoom={zoom}
       className="w-full h-full"
-      style={{ background: "hsl(222 47% 11%)" }}
+      style={{ background: "hsl(210 20% 98%)" }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
@@ -178,7 +178,7 @@ export default function DispatchMap({
         <Polyline
           key={`route-${patrolId}`}
           positions={positions}
-          color="#3b82f6"
+          color="#1a365d"
           weight={4}
           opacity={0.8}
         />
