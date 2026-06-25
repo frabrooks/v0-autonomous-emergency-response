@@ -22,6 +22,107 @@ const DispatchMap = dynamic(() => import("@/components/dispatch-map"), {
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
+// DEMO MODE: backend / API keys are disabled on this branch, so we serve static
+// fake data to capture screenshots of a patrol en route. Movement / refresh is
+// disabled. Set to false to restore live SWR polling from the API.
+const DEMO_MODE = true;
+
+// A hand-built road-like route (OSRM format: [lng, lat]) from the dispatched
+// patrol's start position toward the incident near Paddington.
+const DEMO_ROUTE: [number, number][] = [
+  [-0.1426, 51.5074],
+  [-0.1458, 51.5092],
+  [-0.1491, 51.5108],
+  [-0.1523, 51.5121],
+  [-0.1558, 51.5133],
+  [-0.1601, 51.5142],
+  [-0.1645, 51.5149],
+  [-0.1689, 51.5156],
+  [-0.1727, 51.5162],
+  [-0.1769, 51.5169],
+];
+
+const DEMO_PATROLS: Patrol[] = [
+  {
+    id: 1,
+    call_sign: "ALPHA-2",
+    // Positioned on its remaining route (matches DEMO_ROUTE[route_index]).
+    latitude: 51.5121,
+    longitude: -0.1523,
+    status: "dispatched",
+    route_coordinates: DEMO_ROUTE,
+    route_index: 3,
+    target_incident_id: 1,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: 2,
+    call_sign: "BRAVO-1",
+    latitude: 51.4975,
+    longitude: -0.1357,
+    status: "available",
+    route_coordinates: null,
+    route_index: 0,
+    target_incident_id: null,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: 3,
+    call_sign: "CHARLIE-4",
+    latitude: 51.5236,
+    longitude: -0.0865,
+    status: "available",
+    route_coordinates: null,
+    route_index: 0,
+    target_incident_id: null,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: 4,
+    call_sign: "DELTA-3",
+    latitude: 51.5101,
+    longitude: -0.0589,
+    status: "busy",
+    route_coordinates: null,
+    route_index: 0,
+    target_incident_id: null,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+];
+
+const DEMO_INCIDENTS: (Incident & { assigned_patrol_call_sign?: string })[] = [
+  {
+    id: 1,
+    description:
+      "Two-vehicle collision on the A40 near Paddington. One vehicle overturned with a person trapped, possible fuel leak.",
+    latitude: 51.5169,
+    longitude: -0.1769,
+    severity: "critical",
+    status: "dispatched",
+    transcript: null,
+    assigned_patrol_id: 1,
+    assigned_patrol_call_sign: "ALPHA-2",
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+  {
+    id: 2,
+    description: "Reported break-in at commercial premises on Old Street.",
+    latitude: 51.5256,
+    longitude: -0.0875,
+    severity: "medium",
+    status: "pending",
+    transcript: null,
+    assigned_patrol_id: null,
+    created_at: "2024-01-01T00:00:00Z",
+    updated_at: "2024-01-01T00:00:00Z",
+  },
+];
+
 // Helper to safely format coordinates (handles string/number from DB)
 function formatCoord(value: number | string | null | undefined): string {
   if (value === null || value === undefined) return "N/A";
@@ -66,21 +167,27 @@ function DispatchContent() {
     : undefined;
 
   const {
-    data: patrols,
+    data: livePatrols,
     error: patrolsError,
     mutate: mutatePatrols,
-  } = useSWR<Patrol[]>("/api/patrols", fetcher, { refreshInterval: 5000 });
+  } = useSWR<Patrol[]>(DEMO_MODE ? null : "/api/patrols", fetcher, {
+    refreshInterval: DEMO_MODE ? 0 : 5000,
+  });
 
   const {
-    data: incidents,
+    data: liveIncidents,
     error: incidentsError,
     mutate: mutateIncidents,
-  } = useSWR<Incident[]>("/api/incidents", fetcher, { refreshInterval: 5000 });
+  } = useSWR<Incident[]>(DEMO_MODE ? null : "/api/incidents", fetcher, {
+    refreshInterval: DEMO_MODE ? 0 : 5000,
+  });
 
-
+  // In demo mode, use the static fake data instead of live API results.
+  const patrols = DEMO_MODE ? DEMO_PATROLS : livePatrols;
+  const incidents = DEMO_MODE ? DEMO_INCIDENTS : liveIncidents;
 
   const isLoading = !patrols || !incidents;
-  const hasError = patrolsError || incidentsError;
+  const hasError = DEMO_MODE ? false : patrolsError || incidentsError;
 
   const availablePatrols = patrols?.filter((p) => p.status === "available").length || 0;
   const dispatchedPatrols = patrols?.filter((p) => p.status === "dispatched").length || 0;

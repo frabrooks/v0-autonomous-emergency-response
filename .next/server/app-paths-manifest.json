@@ -1,1 +1,16 @@
-{}
+{
+  "/api/analyze/route": "app/api/analyze/route.js",
+  "/api/dispatch/route": "app/api/dispatch/route.js",
+  "/api/incidents/[id]/route": "app/api/incidents/[id]/route.js",
+  "/api/incidents/route": "app/api/incidents/route.js",
+  "/api/patrols/[id]/incident/route": "app/api/patrols/[id]/incident/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/api/patrols/[id]/route": "app/api/patrols/[id]/route.js",
+  "/api/patrols/route": "app/api/patrols/route.js",
+  "/api/simulate/route": "app/api/simulate/route.js",
+  "/api/speech-token/route": "app/api/speech-token/route.js",
+  "/page": "app/page.js",
+  "/dispatch/page": "app/dispatch/page.js",
+  "/patrol/page": "app/patrol/page.js",
+  "/transcribe/page": "app/transcribe/page.js"
+}

@@ -31,25 +31,56 @@ interface FormData {
 // Import Speech SDK dynamically to avoid SSR issues
 let SpeechSDK: typeof import("microsoft-cognitiveservices-speech-sdk") | null = null;
 
+// DEMO MODE: backend / API keys are disabled on this branch, so we seed the
+// page with realistic fake data to capture screenshots of a live transcription
+// in progress. Set to false to restore the real Azure Speech behaviour.
+const DEMO_MODE = true;
+
+const DEMO_TRANSCRIPT =
+  "Emergency services, what's your emergency? Yes hello, there's been a serious car accident on the A40 near Paddington. Two vehicles have collided and one of them is on its side. I can see at least one person trapped inside and they're not moving. There's smoke coming from the engine. Please send help quickly, we're just by the junction with Bishop's Bridge Road.";
+
+const DEMO_INTERIM = "I think I can smell petrol as well, it's getting";
+
+const DEMO_FORM: FormData = {
+  description:
+    "Two-vehicle collision on the A40 near Paddington. One vehicle overturned with a person trapped inside and unresponsive. Smoke from engine, possible fuel leak.",
+  severity: "critical",
+  latitude: "51.5169",
+  longitude: "-0.1769",
+  suggestedActions: [
+    "Dispatch nearest patrol unit and ambulance immediately",
+    "Alert fire and rescue for vehicle extraction and fire risk",
+    "Close A40 junction with Bishop's Bridge Road to traffic",
+    "Advise caller to keep a safe distance from the leaking vehicle",
+  ],
+};
+
 export default function TranscribePage() {
   const router = useRouter();
-  const [isRecording, setIsRecording] = useState(false);
-  const [transcript, setTranscript] = useState("");
-  const [interimTranscript, setInterimTranscript] = useState("");
+  const [isRecording, setIsRecording] = useState(DEMO_MODE);
+  const [transcript, setTranscript] = useState(DEMO_MODE ? DEMO_TRANSCRIPT : "");
+  const [interimTranscript, setInterimTranscript] = useState(DEMO_MODE ? DEMO_INTERIM : "");
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
-  const [lastAnalyzedLength, setLastAnalyzedLength] = useState(0);
+  // Seed lastAnalyzedLength so the auto-analyze effect does not fire in demo mode.
+  const [lastAnalyzedLength, setLastAnalyzedLength] = useState(
+    DEMO_MODE ? DEMO_TRANSCRIPT.length : 0
+  );
   
   // Form state - editable by user
-  const [formData, setFormData] = useState<FormData>({
-    description: "",
-    severity: "",
-    latitude: "",
-    longitude: "",
-    suggestedActions: [],
-  });
+  const [formData, setFormData] = useState<FormData>(
+    DEMO_MODE
+      ? DEMO_FORM
+      : {
+          description: "",
+          severity: "",
+          latitude: "",
+          longitude: "",
+          suggestedActions: [],
+        }
+  );
   
   const recognizerRef = useRef<import("microsoft-cognitiveservices-speech-sdk").SpeechRecognizer | null>(null);
   const analyzeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
